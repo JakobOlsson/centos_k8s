@@ -1,0 +1,178 @@
+---
+- name: Setup all hosts for Kubernetes, Controlplane and Workers
+  hosts: all
+  become: yes # become root for the whole playbook
+  tasks:
+    # Kubernetes does not work well with swap
+    # Disabling it for now.
+    - name: Disable Swap (1/2)
+      shell: swapoff -a
+    
+    - name: Disable Swap on reboot (2/2)
+      lineinfile:
+        path: /etc/fstab
+        regexp: ".*swap"
+        state: absent
+
+    # CRI-O lightweight container runtime for k8s
+    # https://cri-o.io/ 
+    - name: Installing requirements needed for cri-o install script (1/5)
+      yum:
+        name:
+          - jq
+          - curl
+          - tar
+        state: present
+
+    - name: Check if cri-o is installed  (2/5)
+      stat:
+        path: /usr/local/bin/crio
+      register: crio_installed
+
+    - name: Download cri-o install script (3/5) 
+      get_url:
+        url: https://raw.githubusercontent.com/cri-o/cri-o/main/scripts/get
+        dest: /tmp/install_crio.sh
+        mode: '0755'
+      when: not crio_installed.stat.exists
+    
+    - name: Install cri-o (4/5)
+      shell: '/tmp/install_crio.sh'
+      args:
+        executable: /usr/bin/bash
+      when: not crio_installed.stat.exists
+    
+    - name: Create registries.conf
+      file:
+        path: /etc/containers/registries.conf
+        state: touch
+        mode: '0644'
+        modification_time: preserve
+        access_time: preserve
+    
+    - name: Create list of unqualified default registries
+      lineinfile:
+        dest: /etc/containers/registries.conf
+        line: unqualified-search-registries = ['registry.fedoraproject.org', 'registry.access.redhat.com', 'registry.centos.org', 'docker.io']
+    
+    - name: Enable cri-o service (5/5)
+      systemd:
+        name: crio
+        state: started
+        enabled: yes
+        daemon_reload: yes
+    
+    # SELinux doesn't work well with Kubernetes
+    - name: Set SELinux to Permisive (1/2)
+      shell: setenforce 0
+    
+    - name: Set SELinux to Permisive on reboot (2/2)
+      lineinfile:
+        path: /etc/selinux/config
+        regexp: "^SELINUX=enforcing$"
+        state: present
+        line: "SELINUX=permissive"
+
+    # Enable Bridge Netfilter for k8s network
+    - name: Add br_netfilter to modules to load on boot (1/2)
+      copy:
+        dest: /etc/modules-load.d/k8s.conf 
+        content: |
+          overlay
+          br_netfilter
+  
+    - name: Load br_netfilter modules now (2/2)
+      shell: modprobe -a overlay br_netfilter
+  
+    # From kubenetes 1.21 and forward, it uses both IPv4 and IPv6
+    - name: Enable IPv6 (if disabled)
+      lineinfile:
+        path: /etc/sysctl.conf
+        regexp: "net.ipv6.conf.all.disable_ipv6 = 1"
+        state: present
+        line: "net.ipv6.conf.all.disable_ipv6 = 0"
+
+    # setup netfilter
+    # Set up required sysctl params, these persist across reboots.
+    - name: Setup netfilter rules (1/2)
+      copy:
+        dest: /etc/sysctl.d/k8s.conf
+        content: |
+          net.bridge.bridge-nf-call-iptables  = 1
+          net.ipv4.ip_forward                 = 1
+          net.bridge.bridge-nf-call-ip6tables = 1
+
+    - name: Enable netfilter rules (1/2)
+      shell: sysctl --system
+
+    # Update Firewall rules
+    - name: Update firewall rules and make them permantent
+      shell: |
+        firewall-cmd --zone=public --add-port=6443/tcp --permanent
+        firewall-cmd --zone=public --add-port=8472/udp --permanent 
+        firewall-cmd --zone=public --add-port=2379-2380/tcp  --permanent
+        firewall-cmd --add-masquerade --permanent
+        # kubelet API
+        firewall-cmd --zone=public --add-port=10250/tcp --permanent
+        # kube-scheduler
+        firewall-cmd --zone=public --add-port=10251/tcp --permanent
+        # kube-controller-manager
+        firewall-cmd --zone=public --add-port=10252/tcp --permanent
+        # NodePort Services
+        firewall-cmd --zone=public --add-port=30000-32767/tcp --permanent
+        # apply changes
+        firewall-cmd --reload
+      args:
+        executable: /usr/bin/bash
+
+    # Add Kubernetes repo
+    - name: Add Kubernetes repo
+      yum_repository:
+        name: Kubernetes
+        description: Kubernetes official repo
+        baseurl: https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
+        enabled: yes
+        gpgcheck: yes
+        repo_gpgcheck: yes
+        gpgkey: https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+        exclude: kubelet kubeadm kubectl # make sure we dont auto upgrade
+    
+    # Install Kubernetes
+    - name: Install Kubernetes tools
+      yum:
+        name:
+          - kubectl
+          - kubelet
+          - kubeadm
+          - tc # command used by kubeadm init
+        state: present
+        disable_excludes: Kubernetes # we need to disable exclude to be able to install them
+   
+    # Enable and start kubelet service
+    - name: Enable Kubernetes kubelet service
+      systemd:
+        name: kubelet
+        state: started
+        enabled: yes
+        daemon_reload: yes
+    
+    # Enable kubernetes audit logs
+    ## Create Default Audit Policy
+    - name: Enable Kubernetes audit logs (1/2)
+      copy:
+        dest: /etc/kubernetes/audit-policy.yaml
+        content: |
+          apiVersion: audit.k8s.io/v1beta1
+          kind: Policy
+          rules:
+            - level: Metadata
+  
+    - name: Kubernetes audit logs directory  (2/2)
+      file:
+        path: /var/log/kubernetes/audit
+        state: directory
+        mode: '0755'
+    
+    # Download kubernetes image
+    - name: Pre-load kubernetes image
+      shell: kubeadm config images pull
