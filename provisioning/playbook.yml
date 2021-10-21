@@ -3,6 +3,12 @@
   hosts: all
   become: yes # become root for the whole playbook
   tasks:
+    - name: Add self to hosts file
+      lineinfile:
+        path: /etc/hosts
+        regexp: "^{{ansible_eth0.ipv4.address}}"
+        line: "{{ansible_default_ipv4.address}} {{ansible_hostname}}"
+
     # Kubernetes does not work well with swap
     # Disabling it for now.
     - name: Disable Swap (1/2)
