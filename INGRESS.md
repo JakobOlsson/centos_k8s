@@ -18,7 +18,7 @@ To setup your kubernetes bare metal cluster with a local Nginx Ingress as LoadBa
 
 5. Create an ingress manifest `ingress.yaml`
 
-   ```
+```yaml
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -39,7 +39,7 @@ spec:
            port:
              number: 8080
 
-   ```
+```
 
 6. Apply it with `kubectl apply -f ingress.yaml`
 7. Open firewall with `firewall-cmd --zone=public --port=80/tcp --permanent`
