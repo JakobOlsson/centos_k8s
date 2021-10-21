@@ -43,4 +43,5 @@ spec:
 
 6. Apply it with `kubectl apply -f ingress.yaml`
 7. Open firewall with `firewall-cmd --zone=public --port=80/tcp --permanent`
-8. TEST! `curl <externalip>`
+8. Get external ip of your host by `vagrant ssh main -c "ip -4 addr show eth0"`
+9. TEST! `curl <externalip>` or test it in your browser
