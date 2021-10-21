@@ -1,4 +1,5 @@
 # Local Ingress
+
 To setup your kubernetes bare metal cluster with a local Nginx Ingress as LoadBalancer using the external ip you have to perform following steps. *NOTE: We will use the already deployed hello-kube from k8s_setup*
 
 1. Get your external ips of all the nodes
@@ -12,7 +13,7 @@ To setup your kubernetes bare metal cluster with a local Nginx Ingress as LoadBa
     `kubectl edit svc -n ingress-nginx ingress-nginx-controller`
     under `spec:` add a new entry `externalIPs:` with values of a list of one or more external ips
 
- 4. Verify that the service now have register external ips by running
+4. Verify that the service now have register external ips by running
 
     `kubectl get svc - ingress-nginx ingress-nginx-controller`
 
