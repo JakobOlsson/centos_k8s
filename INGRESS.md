@@ -19,25 +19,25 @@ To setup your kubernetes bare metal cluster with a local Nginx Ingress as LoadBa
 5. Create an ingress manifest `ingress.yaml`
 
    ```
-   ---
-   apiVersion: networking.k8s.io/v1
-   kind: Ingress
-   metadata:
-     name: minimal-ingress
-     annotations:
-       nginx.ingress.kubernetes.io/rewrite-target: /$1
-       kubernetes.io/ingress.class: "nginx"
-   spec:
-     rules:
-     - http:
-       paths:
-       - path: /
-         pathType: Prefix
-         backend:
-           service:
-             name: hello-kube
-             port:
-               number: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+ name: minimal-ingress
+ annotations:
+   nginx.ingress.kubernetes.io/rewrite-target: /$1
+   kubernetes.io/ingress.class: "nginx"
+spec:
+ rules:
+ - http:
+     paths:
+     - path: /
+       pathType: Prefix
+       backend:
+         service:
+           name: hello-kube
+           port:
+             number: 8080
 
    ```
 
