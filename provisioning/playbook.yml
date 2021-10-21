@@ -22,6 +22,7 @@
           - jq
           - curl
           - tar
+          - containers-common # This will setup are default registries to search/pull from
         state: present
 
     - name: Check if cri-o is installed  (2/5)
@@ -41,19 +42,6 @@
       args:
         executable: /usr/bin/bash
       when: not crio_installed.stat.exists
-    
-    - name: Create registries.conf
-      file:
-        path: /etc/containers/registries.conf
-        state: touch
-        mode: '0644'
-        modification_time: preserve
-        access_time: preserve
-    
-    - name: Create list of unqualified default registries
-      lineinfile:
-        dest: /etc/containers/registries.conf
-        line: unqualified-search-registries = ['registry.fedoraproject.org', 'registry.access.redhat.com', 'registry.centos.org', 'docker.io']
     
     - name: Enable cri-o service (5/5)
       systemd:
